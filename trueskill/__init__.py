@@ -614,6 +614,27 @@ class TrueSkill(object):
                 'draw_probability=%s%s)' % args)
 
 
+def calcNewRating(rating1, rating2, rankMultiplier, env):
+    c = math.sqrt(rating1.sigma**2 + rating2.sigma**2 + 2 * env.beta**2)
+
+    if rankMultiplier == 1:
+        meanDelta = rating1.mu - rating2.mu
+    else:
+        meanDelta = rating2.mu - rating1.mu
+
+    v = env.v_win(meanDelta/c, env.draw_margin/c)
+    w = env.w_win(meanDelta/c, env.draw_margin/c)
+
+    meanMultiplier = (rating1.sigma**2 + env.tau**2)/c
+
+    varianceWithDynamics = rating1.sigma**2 + env.tau**2
+    stdDevMultiplier = varianceWithDynamics/(c**2)
+
+    newMean = rating1.mu + (rankMultiplier*meanMultiplier*v)
+    newStdDev = math.sqrt(varianceWithDynamics*(1 - w*stdDevMultiplier))
+
+    return Rating(newMean, newStdDev)
+
 def rate_1vs1(rating1, rating2, drawn=False, min_delta=DELTA, env=None):
     """A shortcut to rate just 2 players in a head-to-head match::
 
@@ -635,9 +656,8 @@ def rate_1vs1(rating1, rating2, drawn=False, min_delta=DELTA, env=None):
     """
     if env is None:
         env = global_env()
-    ranks = [0, 0 if drawn else 1]
-    teams = env.rate([(rating1,), (rating2,)], ranks, min_delta=min_delta)
-    return teams[0][0], teams[1][0]
+    env.draw_margin = calc_draw_margin(env.draw_probability, 2, env)
+    return calcNewRating(rating1, rating2, 1, env), calcNewRating(rating2, rating1, -1, env)
 
 
 def quality_1vs1(rating1, rating2, env=None):
